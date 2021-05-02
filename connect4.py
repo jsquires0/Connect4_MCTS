@@ -1,9 +1,11 @@
 import numpy as np 
+from copy import deepcopy as copy
+import mcts
 
 # define board dimensions
 ROWS = 6
 COLS = 7
-unicode_chars = {0:u'\u25AB', 1:u'\u25CE', 2:u'\u25C9' } #F, B
+unicode_chars = {0:u'\u25AB', 1:u'\u25CE', 2:u'\u25C9' }
 
 class ConnectFour():
     """ 
@@ -11,21 +13,36 @@ class ConnectFour():
     Connect 4 game state and available actions
     """
 
-    def __init__(self):
-        """ Initializes an empty game board"""
-        self._reset()
+    def __init__(self, last_state = None, move = None):
+        """ Initialize a game state """
+        self.last_state = last_state
+        self.move = move
+        self._reset(move)   
+        
+    def _reset(self, move):
+        
+        if self.last_state:
+            # copy previous board, column occupancies
+            self.board = np.copy(self.last_state.board)
+            self.column_occupancies = np.copy(self.last_state.column_occupancies)
+            self.terminal = False
+            self.player = copy(self.last_state.player)
+            # increment the previous state
+            self.make_move(self.move, self.player)
 
-    def _reset(self):
-        self.board = np.zeros(shape = (ROWS, COLS), dtype = np.int8)
-        self.column_occupancies = np.zeros(shape = COLS, dtype = np.int8)
-        self.move_count = 0
-        self.terminal = False
-
+        else:
+            # initialize an empty game board
+            self.board = np.zeros(shape = (ROWS, COLS), dtype = np.int8)
+            self.column_occupancies = np.zeros(shape = COLS, dtype = np.int8)
+            self.terminal = False
+            # player 1 moves on even counts, 2 on odd
+            self.player = 1
+    
     def valid_moves(self):
         """ return column indexes where pieces may be dropped"""
         return np.where(self.column_occupancies < ROWS)[0]
 
-    def make_move(self, col, checker):
+    def make_move(self, col, player):
         """
         Places a checker in a column and increments move counter
 
@@ -33,19 +50,33 @@ class ConnectFour():
         ----------
         col
             index of column to place checker
-        checker
+        player
             1 or 2, representing which player is placing the checker
         """
         row = self.column_occupancies[col]
-        self.board[row][col] = checker
+        self.board[row][col] = player
         self.column_occupancies[col] += 1
-        self.move_count += 1
 
-        return
+        outcome =  self.game_over()
+        return outcome
+
+    def game_over(self):
+        """ Checks if the game is over. 
+
+        Returns
+        -----------
+        -1: Draw, 0: No win, 1: Player 1 win, 2: Player 2 win
+        """
+        if self.draw():
+            return -1
+        winner = self.win()
+
+        return winner
 
     def draw(self):
         # could also use valid_moves()
-        return self.move_count == ROWS*COLS
+        self.terminal = (self.valid_moves().size == 0)
+        return self.terminal
 
     def win(self):
         """
@@ -56,13 +87,9 @@ class ConnectFour():
         0: No win, 1: Player 1 win, 2: Player 2 win
         """
         # check for horizontal or vertical win
-        winner = self.four_row_col()
-        if winner:
-            return winner
-        else:
-            # check for diagonal win
-            winner = self.four_diagonal()
+        winner = self.four_row_col() or self.four_diagonal()
         self.terminal = bool(winner)
+
         return winner
 
     def four_row_col(self):
@@ -126,30 +153,39 @@ class ConnectFour():
                     return self.board[i][j]
         return 0
 
-    def take_human_turn(self, player):
+    def take_human_turn(self, player = 1):
         """ Prompt user to place a checker """
         print('Choose a column (0-6) \n')
         col = -1
         while col not in self.valid_moves():
             col = int(input('>>'))
-        self.make_move(col, player)
-        self.last_player = player
+        outcome = self.make_move(col, player)
 
-        return
+        return outcome
 
-    def take_MCTS_turn(self):
-        return
+    def take_MCTS_turn(self, player = 2):
+        node = mcts.Node(self, parent = None)
 
-    def play(self):
-        # player 1 starts
-        self.last_player = 2
-        
+        return mcts.MonteCarloTreeSearch(node).action
+
+    def play_human_vs_AI(self):
+        """ Plays a complete game against the MCTS AI. Human player
+        always starts
+        """
+
         while not (self.win() or self.draw()):
-            player = (1 if self.last_player == 2 else 2)
-            self.take_human_turn(player)
-            self.show_board()
-            
-        print('Game over')
+            # human moves
+            if self.player == 1:
+                outcome = self.take_human_turn(self.player)
+            # AI moves
+            else:
+                #outcome = self.take_human_turn(self.player)
+                mcts_move = self.take_MCTS_turn(self.player)
+                outcome = self.make_move(mcts_move, self.player)
+                self.show_board()
+            self.player = self.player % 2 + 1
+
+        print(f'Game over - Player {outcome} wins')
         return
 
     def show_board(self):
@@ -187,4 +223,4 @@ class ConnectFour():
 
 if __name__ == '__main__':
     C4 = ConnectFour()
-    C4.play()
+    C4.play_human_vs_AI()

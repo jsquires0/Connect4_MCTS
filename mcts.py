@@ -1,0 +1,169 @@
+import numpy as np
+import random
+import connect4
+import copy
+
+class MonteCarloTreeSearch():
+    """ Implementation of monte carlo tree search for a two
+    player game"""
+
+    def __init__(self, root, n_rollouts = 100):
+        self.root = root
+        self.n_rollouts = n_rollouts
+        self.c = np.sqrt(2) # UCT exploration param
+
+        self.action = self.search()
+
+    def selection_expansion(self, node):
+        """ 
+        Beginning from a root node, repeatedly selects a move and traverses to 
+        a corresponding child node. Determining which move to take at each step 
+        is handled by the tree policy, which seeks to balance exploration and
+        exploitation. 
+        
+        Selection ends when an encountered node's children are not already
+        part of the search tree. At this point,
+        one of the missing child nodes is added to the search tree.
+
+        """
+        # traverse tree, looking for an unpopulated child node
+        while ((len(node.state.valid_moves()) == len(node.children)) and
+               (not node.state.terminal)):
+            node = self.choose_child(node)
+
+        # return leaf
+        if node.state.terminal:
+            return node
+
+        # expand tree if not terminal 
+        for move in node.state.valid_moves():
+            if move in node.children.keys():
+                continue
+            else:
+                # add a new child node to the tree
+                new_child = Node(game_state = connect4.ConnectFour(node.state, 
+                                                                   move),  
+                                 parent = node)
+                node.children[move] = new_child
+                break
+
+        return new_child
+    
+    def simulation(self, node):
+        """ 
+        Plays the game out from node to a terminal game state according to 
+        the rollout policy
+        """
+        player = node.state.player
+        tmp_node = copy.deepcopy(node)
+        while not tmp_node.state.terminal:
+            outcome = self.rollout(tmp_node, player)
+            player = player % 2 + 1
+
+        # If node is terminal, return the winner
+        return self.rollout(tmp_node, player)
+
+    
+    def backup(self, node, outcome):
+        # update win ratios for nodes along selection path
+        while node.parent:
+            node.increment(outcome)
+            node = node.parent
+        self.root.increment(outcome)
+        return
+
+    def choose_child(self, node, use_tree = True):
+        """ 
+        Choose the best child of the current node according to
+        the tree policy, or according to win ratio
+        """
+
+        best = -1
+        winners = []
+        # check each child for highest UCT score
+        for child in node.children.values():
+            # if this function is called during selection, use the tree policy
+            if use_tree:
+                score = self.tree_policy(node, child)
+            # otherwise it's called after backup, use win ratio
+            else:
+                score = child.wins / child.visits
+            
+            # compare scores
+            if score > best:
+                winners = [child]
+                best = score
+            elif score == best:
+                if winners:
+                    winners.append(child)
+                else: 
+                    winners = [child]
+
+        return random.choice(winners)
+            
+    def tree_policy(self, node, child):
+        """
+        Upper Confidence Bound applied to Trees (UCT)
+        """
+        exploit = child.wins/child.visits
+        explore = np.sqrt(np.log(node.visits / child.visits))
+        
+        return exploit + self.c * explore
+    
+    def rollout(self, node, player):
+        if node.state.terminal:
+            return node.state.game_over()
+
+        move = self.rollout_policy(node.state.valid_moves())
+        outcome = node.state.make_move(move, player)
+
+        return outcome
+        
+    def rollout_policy(self, choices):
+        return random.choice(choices)
+
+    def search(self):
+        """ Executes all four stages of the MCTS and chooses a move
+        after completing rollouts 
+        """
+        rollouts = 0
+        while rollouts < self.n_rollouts:
+            child = self.selection_expansion(self.root)
+            outcome = self.simulation(child)
+            self.backup(child, outcome)
+            rollouts += 1
+
+        #for move, child in self.root.children.items():
+            #child.state.show_board()
+            #print(child.state.player, child.wins, child.visits)
+
+        best_move = -1
+        # find and return the child that results in the higest win rate
+        best_node = self.choose_child(self.root, use_tree = False)
+        for move, child in self.root.children.items():
+            if child == best_node:
+                best_move = move
+
+        return best_move
+
+class Node():
+    def __init__(self, game_state = None, parent = None):
+        self.parent = parent
+        self.children = {}
+        self.visits = 0
+        self.state = game_state
+        self.wins = 0
+    
+    def increment(self, winner):
+        """ 
+        Update a node's statistics during backup. Since turns alternate, and 
+        action decisions are based on child node stats, win total is updated
+        only if the opposing player wins.
+        """
+        self.visits += 1
+
+        if ((self.state.player != winner) and
+            (self.state.player != -1)):
+            self.wins += 1
+
+        return
