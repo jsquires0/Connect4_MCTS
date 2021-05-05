@@ -67,9 +67,10 @@ class ConnectFour():
         -----------
         -1: Draw, 0: No win, 1: Player 1 win, 2: Player 2 win
         """
-        if self.draw():
-            return -1
         winner = self.win()
+        
+        if self.draw() and not winner:
+            return -1
 
         return winner
 
@@ -155,7 +156,8 @@ class ConnectFour():
 
     def take_human_turn(self, player = 1):
         """ Prompt user to place a checker """
-        print('Choose a column (0-6) \n')
+        col_id = COLS - 1
+        print(f'Choose a column number (0-{col_id})  \n')
         col = -1
         while col not in self.valid_moves():
             col = int(input('>>'))

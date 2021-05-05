@@ -7,7 +7,7 @@ class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, n_rollouts = 100):
+    def __init__(self, root, n_rollouts = 5000):
         self.root = root
         self.n_rollouts = n_rollouts
         self.c = np.sqrt(2) # UCT exploration param
@@ -36,7 +36,9 @@ class MonteCarloTreeSearch():
             return node
 
         # expand tree if not terminal 
-        for move in node.state.valid_moves():
+        valid_moves = node.state.valid_moves()
+        np.random.shuffle(valid_moves)
+        for move in valid_moves:
             if move in node.children.keys():
                 continue
             else:
@@ -55,13 +57,16 @@ class MonteCarloTreeSearch():
         the rollout policy
         """
         player = node.state.player
+        # initialize a node for the rollout
         tmp_node = copy.deepcopy(node)
+        tmp_node.player = player % 2 + 1
         while not tmp_node.state.terminal:
-            outcome = self.rollout(tmp_node, player)
-            player = player % 2 + 1
+            outcome = self.rollout(tmp_node, tmp_node.player)
+            tmp_node.player = tmp_node.player % 2 + 1
 
+        tmp_node.state.player = player
         # If node is terminal, return the winner
-        return self.rollout(tmp_node, player)
+        return self.rollout(tmp_node, tmp_node.player)
 
     
     def backup(self, node, outcome):
@@ -69,16 +74,23 @@ class MonteCarloTreeSearch():
         while node.parent:
             node.increment(outcome)
             node = node.parent
+
         self.root.increment(outcome)
         return
 
     def choose_child(self, node, use_tree = True):
         """ 
         Choose the best child of the current node according to
-        the tree policy, or according to win ratio
+        the tree policy, or according to win ratio. Since win ratio corresponds 
+        to parent's decision, if this funciton is called with use_tree = False,
+        the 'best child' is the node with the lowest win ratio.
         """
+        # initialize best score
+        if use_tree:
+            best = -1
+        else:
+            best = 2
 
-        best = -1
         winners = []
         # check each child for highest UCT score
         for child in node.children.values():
@@ -89,15 +101,24 @@ class MonteCarloTreeSearch():
             else:
                 score = child.wins / child.visits
             
-            # compare scores
-            if score > best:
-                winners = [child]
-                best = score
-            elif score == best:
-                if winners:
-                    winners.append(child)
-                else: 
+            # compare scores to find highest
+            if use_tree:
+                if score > best:
                     winners = [child]
+                    best = score
+                elif score == best:
+                    if winners:
+                        winners.append(child)
+                    else: 
+                        winners = [child]
+
+            # compare scores to find lowest
+            else:
+                if score < best:
+                    winners = [child]
+                    best = score
+                elif score == best:
+                    winners.append(child)
 
         return random.choice(winners)
             
@@ -133,11 +154,11 @@ class MonteCarloTreeSearch():
             self.backup(child, outcome)
             rollouts += 1
 
-        #for move, child in self.root.children.items():
+        # display evaluations
+        # for move, child in self.root.children.items():
             #child.state.show_board()
-            #print(child.state.player, child.wins, child.visits)
-
-        best_move = -1
+            #print(child.wins, child.visits)
+    
         # find and return the child that results in the higest win rate
         best_node = self.choose_child(self.root, use_tree = False)
         for move, child in self.root.children.items():
@@ -162,8 +183,11 @@ class Node():
         """
         self.visits += 1
 
-        if ((self.state.player != winner) and
-            (self.state.player != -1)):
-            self.wins += 1
+        # if not a draw
+        if (winner != -1):
+            if self.state.player != winner:
+                self.wins += 1
+            elif self.state.player == winner:
+                self.wins -= 1
 
         return
