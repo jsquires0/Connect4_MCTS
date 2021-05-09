@@ -1,7 +1,6 @@
 import numpy as np 
+import argparse
 from copy import deepcopy as copy
-import mcts
-
 # define board dimensions
 ROWS = 6
 COLS = 7
@@ -224,5 +223,14 @@ class ConnectFour():
         return unicode_chars[loc]
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--device', type=str, default='cpu')
+    args = parser.parse_args()
+
+    if args.device == 'cpu':
+        import serial_mcts as mcts
+    else:
+        import leaf_parallel_mcts as mcts
+
     C4 = ConnectFour()
     C4.play_human_vs_AI()

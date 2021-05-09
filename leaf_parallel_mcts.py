@@ -3,11 +3,17 @@ import random
 import connect4
 import copy
 
+
+import pycuda.driver as cuda
+import pycuda.autoinit
+from pycuda.compiler import SourceModule
+
+import simulate 
 class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, n_rollouts = 5000):
+    def __init__(self, root, n_rollouts = 50):
         self.root = root
         self.n_rollouts = n_rollouts
         self.c = np.sqrt(2) # UCT exploration param
@@ -150,6 +156,20 @@ class MonteCarloTreeSearch():
         rollouts = 0
         while rollouts < self.n_rollouts:
             child = self.selection_expansion(self.root)
+            
+            # test pycuda call
+            a = np.random.randn(4,4)
+            a = a.astype(np.float32)
+            a_gpu = cuda.mem_alloc(a.nbytes)
+            cuda.memcpy_htod(a_gpu,a)
+            mod = SourceModule(simulate.kernel_c_code);
+            func = mod.get_function("doublify")
+            func(a_gpu, block = (4,4,1))
+            a_doubled = np.empty_like(a)
+            cuda.memcpy_dtoh(a_doubled, a_gpu)
+            print(a_doubled)
+            print(a)
+            
             outcome = self.simulation(child)
             self.backup(child, outcome)
             rollouts += 1
