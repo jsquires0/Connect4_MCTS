@@ -158,17 +158,26 @@ class MonteCarloTreeSearch():
             child = self.selection_expansion(self.root)
             
             # test pycuda call
-            a = np.random.randn(4,4)
-            a = a.astype(np.float32)
-            a_gpu = cuda.mem_alloc(a.nbytes)
-            cuda.memcpy_htod(a_gpu,a)
-            mod = SourceModule(simulate.kernel_c_code);
+            ROWS = 6
+            COLS = 7
+            h_board = child.state.board
+            h_occ = child.state.column_occupancies
+            h_board = h_board.astype(np.int32)
+            h_occ = h_occ.astype(np.int32)
+            d_board = cuda.mem_alloc(h_board.nbytes)
+            d_occ = cuda.mem_alloc(h_occ.nbytes)
+            h_results = np.zeros(shape = (self.n_rollouts, 1),dtype=np.int32)
+            d_results = cuda.mem_alloc(h_results.nbytes)
+            cuda.memcpy_htod(d_results, h_results)
+            cuda.memcpy_htod(d_occ, h_occ)
+            cuda.memcpy_htod(d_board,h_board)
+            mod = SourceModule(simulate.gpu_code)
             func = mod.get_function("doublify")
-            func(a_gpu, block = (4,4,1))
-            a_doubled = np.empty_like(a)
-            cuda.memcpy_dtoh(a_doubled, a_gpu)
+            func(d_board, d_occ, d_results,  block = (64,1,1))
+            a_doubled = np.empty_like(h_board)
+            cuda.memcpy_dtoh(a_doubled, d_board)
             print(a_doubled)
-            print(a)
+            print(h_board)
             
             outcome = self.simulation(child)
             self.backup(child, outcome)
