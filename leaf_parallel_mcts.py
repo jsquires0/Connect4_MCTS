@@ -13,8 +13,10 @@ class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, n_rollouts = 50):
+    def __init__(self, root, rows, cols, n_rollouts = 64):
         self.root = root
+        self.rows = rows
+        self.cols = cols
         self.n_rollouts = n_rollouts
         self.c = np.sqrt(2) # UCT exploration param
 
@@ -75,13 +77,13 @@ class MonteCarloTreeSearch():
         return self.rollout(tmp_node, tmp_node.player)
 
     
-    def backup(self, node, outcome):
+    def backup(self, node, outcomes):
         # update win ratios for nodes along selection path
         while node.parent:
-            node.increment(outcome)
+            node.increment(outcomes)
             node = node.parent
 
-        self.root.increment(outcome)
+        self.root.increment(outcomes)
         return
 
     def choose_child(self, node, use_tree = True):
@@ -149,6 +151,38 @@ class MonteCarloTreeSearch():
     def rollout_policy(self, choices):
         return random.choice(choices)
 
+
+    def gpu_simulation(self, node):
+        """
+        Performs n_rollouts in parallel on gpu, all starting from the passed in
+        node.
+        """
+
+        # define host inputs
+        h_board = node.state.board.astype(np.int32)
+        h_occ = node.state.column_occupancies.astype(np.int32)
+        h_outcomes = np.zeros(shape = (self.n_rollouts, 1),dtype=np.int32)
+
+        # define device inputs
+        d_board = cuda.mem_alloc(h_board.nbytes)
+        d_occ = cuda.mem_alloc(h_occ.nbytes)
+        d_outcomes = cuda.mem_alloc(h_outcomes.nbytes)
+   
+        # transfer host -> device
+        cuda.memcpy_htod(d_outcomes, h_outcomes)
+        cuda.memcpy_htod(d_occ, h_occ)
+        cuda.memcpy_htod(d_board,h_board)
+
+        # call kernel
+        mod = SourceModule(simulate.gpu_code)
+        func = mod.get_function("gpuSimulate")
+        player = np.int32(node.state.player)
+        func(d_board, d_occ, player, d_outcomes,  block = (64,1,1))
+
+        # transfer device -> host
+        cuda.memcpy_dtoh(h_outcomes, d_outcomes)
+        return h_outcomes
+
     def search(self):
         """ Executes all four stages of the MCTS and chooses a move
         after completing rollouts 
@@ -156,31 +190,8 @@ class MonteCarloTreeSearch():
         rollouts = 0
         while rollouts < self.n_rollouts:
             child = self.selection_expansion(self.root)
-            
-            # test pycuda call
-            ROWS = 6
-            COLS = 7
-            h_board = child.state.board
-            h_occ = child.state.column_occupancies
-            h_board = h_board.astype(np.int32)
-            h_occ = h_occ.astype(np.int32)
-            d_board = cuda.mem_alloc(h_board.nbytes)
-            d_occ = cuda.mem_alloc(h_occ.nbytes)
-            h_results = np.zeros(shape = (self.n_rollouts, 1),dtype=np.int32)
-            d_results = cuda.mem_alloc(h_results.nbytes)
-            cuda.memcpy_htod(d_results, h_results)
-            cuda.memcpy_htod(d_occ, h_occ)
-            cuda.memcpy_htod(d_board,h_board)
-            mod = SourceModule(simulate.gpu_code)
-            func = mod.get_function("doublify")
-            func(d_board, d_occ, d_results,  block = (64,1,1))
-            a_doubled = np.empty_like(h_board)
-            cuda.memcpy_dtoh(a_doubled, d_board)
-            print(a_doubled)
-            print(h_board)
-            
-            outcome = self.simulation(child)
-            self.backup(child, outcome)
+            outcomes = self.gpu_simulation(child)
+            self.backup(child, outcomes)
             rollouts += 1
 
         # display evaluations
@@ -204,19 +215,13 @@ class Node():
         self.state = game_state
         self.wins = 0
     
-    def increment(self, winner):
+    def increment(self, outcomes):
         """ 
         Update a node's statistics during backup. Since turns alternate, and 
         action decisions are based on child node stats, win total is updated
         only if the opposing player wins.
         """
-        self.visits += 1
-
-        # if not a draw
-        if (winner != -1):
-            if self.state.player != winner:
-                self.wins += 1
-            elif self.state.player == winner:
-                self.wins -= 1
+        self.visits += self.n_rollouts
+        self.wins += outcomes.sum()
 
         return

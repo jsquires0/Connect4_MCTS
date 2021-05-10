@@ -7,8 +7,10 @@ class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, n_rollouts = 50):
+    def __init__(self, root, rows, cols, n_rollouts = 50):
         self.root = root
+        self.rows = rows
+        self.cols = cols
         self.n_rollouts = n_rollouts
         self.c = np.sqrt(2) # UCT exploration param
 

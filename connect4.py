@@ -167,7 +167,7 @@ class ConnectFour():
     def take_MCTS_turn(self, player = 2):
         node = mcts.Node(self, parent = None)
 
-        return mcts.MonteCarloTreeSearch(node).action
+        return mcts.MonteCarloTreeSearch(node, ROWS, COLS).action
 
     def play_human_vs_AI(self):
         """ Plays a complete game against the MCTS AI. Human player

@@ -1,11 +1,13 @@
-
 gpu_code = """
 extern "C"
 {
     #define COLS 7 
     #define ROWS 6
-    __device__ int getValidMoves(int *occupancies)
-    {
+
+    __device__ int getValidMoves(int *occupancies, int **arr)
+    {   
+        // initialize array to be length COLS
+        *arr = malloc(COLS * sizeof(int));
         //make a move from the list of valid moves
         int numValidMoves = 0;
         for(int c = 0; c < COLS; c++)
@@ -16,20 +18,94 @@ extern "C"
             }
         }
         int validMoves[numValidMoves];
+        int i = 0;
+        // populate array of valid moves
         for(int c = 0; c < COLS; c++)
         {
             if (occupancies[c] < ROWS)
             {
-                validMoves[c] = c;
+                validMoves[i] = c;
+                i++;
             }
         }
-    }
-    __device__ int getOutcome(int *boardState, int *validMoves)
-    {
-        
+        // reallocate array to have size numValidMoves
+        *arr = realloc(*arr, numValidMoves * sizeof(int));
+        *arr = validMoves;
+
+        return numValidMoves;
     }
 
-    __global__ void doublify(int *boardState, 
+
+    __device__ int getOutcome(int *boardState, int numValidMoves)
+    {
+        //row win?
+        for (int j=0; j < (COLS-3); j++)
+        {
+            for (int i=0; i < ROWS; i++)
+            {
+                if ((boardState[i][j] == board[i][j+1]) &&
+                    ((boardState[i][j+1] == board[i][j+2]) &&
+                    (boardState[i][j+2] == board[i][j+3]) &&
+                    (boardState[i][j] != 0))
+                    {
+                        return boardState[i][j];
+                    }
+            }
+        }
+        // col win?
+        for (int j=0; j < (COLS); j++)
+        {
+            for (int i=0; i < (ROWS-3); i++)
+            {
+                if ((boardState[i][j] == board[i+1][j]) &&
+                    ((boardState[i+1][j] == board[i+2][j]) &&
+                    (boardState[i+2][j] == board[i+3][j]) &&
+                    (boardState[i][j] != 0))
+                    {
+                        return boardState[i][j];
+                    }
+            }
+        }
+        // diagonal case 1?
+        for (int j=0; j < (COLS-3); j++)
+        {
+            for (int i=0; i < (ROWS-3); i++)
+            {
+                if ((boardState[i][j] == board[i+1][j+1]) &&
+                    ((boardState[i+1][j+1] == board[i+2][j+2]) &&
+                    (boardState[i+2][j+2] == board[i+3][j+3]) &&
+                    (boardState[i][j] != 0))
+                    {
+                        return boardState[i][j];
+                    }
+            }
+        }
+        // diagonal case 2?
+        for (int j=0; j < (COLS-3); j++)
+        {
+            for (int i=3; i < (ROWS); i++)
+            {
+                if ((boardState[i][j] == board[i-1][j+1]) &&
+                    ((boardState[i-1][j+1] == board[i-2][j+2]) &&
+                    (boardState[i-2][j+2] == board[i-3][j+3]) &&
+                    (boardState[i][j] != 0))
+                    {
+                        return boardState[i][j];
+                    }
+            }
+        }
+
+        // check for a draw 
+        if(!numValidMoves)
+        {
+           return -1; 
+        }
+
+        // game is not over
+        return 0;
+    }
+
+    __global__ void gpuSimulate(int *boardState, 
                              int *occupancies,
                              int player,
                              int *results)
@@ -53,59 +129,52 @@ extern "C"
         {
             tmpOccupancies[c] = occupancies[c];
         }
+
         // current node's player
         int tmpPlayer = player % 2 + 1;
         
         // make valid moves until board is in a terminal state
         int nonTerminal = 1;
-        //TODO check if game is over
+        //TODO check if game is over. if yes, return winner
         
         while (nonTerminal)
         {
-
             //make a move from the list of valid moves
-            int numValidMoves = 0;
-            for(int c = 0; c < COLS; c++)
-            {
-                if (tmpOccupancies[c] < ROWS)
-                {
-                    numValidMoves += 1;
-                }
-            }
-            int validMoves[numValidMoves];
-            for(int c = 0; c < COLS; c++)
-            {
-                if (tmpOccupancies[c] < ROWS)
-                {
-                    validMoves[c] = c;
-                }
-            }
+            int numValidMoves;
+            int *validMoves;
+            numValidMoves = getValidMoves(tmpOccupancies, &validMoves);
+
             // choose a move
             int n = rand()%(numValidMoves+1);
-            int move = validMoves[n];
+            int col = validMoves[n];
 
-            // make the move (update board, occ, check for winner
+            // make the move
             int row = tmpOccupancies[move]
-            tmpBoard[row][move] = tmpPlayer;
+            tmpBoard[row][col] = tmpPlayer;
+            tmpOccupancies[col] ++;
+
             // check for winner
-            
+            winner = getOutcome(tmpBoard, numValidMoves)
+            if (winner != 0)
+            {
+                nonTerminal = 0;
+            }
             //update the player
             tmpPlayer = tmpPlayer % 2 + 1;
         }
-
-        tmpPlayer = player;
         
-        
-
-
-        // return winner
-        // call game over with original boardState, 
-        //results[idx] = winner;
-        boardState[idx] *=2;
+        // store outcome
+        if (winner == player){
+            results[idx] = -1;
+        }
+        else if (!winner)
+        {
+            results[idx] = 0;
+        }
+        else
+        {
+            results[idx] = 1;
+        }
     }
-
-
-
-
 }
 """
