@@ -1,4 +1,6 @@
 gpu_code = """
+#include <curand.h>
+#include <curand_kernel.h>
 extern "C"
 {
     #define COLS 7 
@@ -7,7 +9,7 @@ extern "C"
     __device__ int getValidMoves(int *occupancies, int **arr)
     {   
         // initialize array to be length COLS
-        *arr = malloc(COLS * sizeof(int));
+        *arr = (int *) malloc(COLS * sizeof(int));
         //make a move from the list of valid moves
         int numValidMoves = 0;
         for(int c = 0; c < COLS; c++)
@@ -17,7 +19,7 @@ extern "C"
                 numValidMoves += 1;
             }
         }
-        int validMoves[numValidMoves];
+        int validMoves[COLS];
         int i = 0;
         // populate array of valid moves
         for(int c = 0; c < COLS; c++)
@@ -29,23 +31,23 @@ extern "C"
             }
         }
         // reallocate array to have size numValidMoves
-        *arr = realloc(*arr, numValidMoves * sizeof(int));
+        //*arr = (int *)realloc(*arr, numValidMoves * sizeof(int));
         *arr = validMoves;
 
         return numValidMoves;
     }
 
 
-    __device__ int getOutcome(int *boardState, int numValidMoves)
+    __device__ int getOutcome(int boardState[ROWS][COLS], int numValidMoves)
     {
         //row win?
         for (int j=0; j < (COLS-3); j++)
         {
             for (int i=0; i < ROWS; i++)
             {
-                if ((boardState[i][j] == board[i][j+1]) &&
-                    ((boardState[i][j+1] == board[i][j+2]) &&
-                    (boardState[i][j+2] == board[i][j+3]) &&
+                if ((boardState[i][j] == boardState[i][j+1]) &&
+                    (boardState[i][j+1] == boardState[i][j+2]) &&
+                    (boardState[i][j+2] == boardState[i][j+3]) &&
                     (boardState[i][j] != 0))
                     {
                         return boardState[i][j];
@@ -57,9 +59,9 @@ extern "C"
         {
             for (int i=0; i < (ROWS-3); i++)
             {
-                if ((boardState[i][j] == board[i+1][j]) &&
-                    ((boardState[i+1][j] == board[i+2][j]) &&
-                    (boardState[i+2][j] == board[i+3][j]) &&
+                if ((boardState[i][j] == boardState[i+1][j]) &&
+                    (boardState[i+1][j] == boardState[i+2][j]) &&
+                    (boardState[i+2][j] == boardState[i+3][j]) &&
                     (boardState[i][j] != 0))
                     {
                         return boardState[i][j];
@@ -71,9 +73,9 @@ extern "C"
         {
             for (int i=0; i < (ROWS-3); i++)
             {
-                if ((boardState[i][j] == board[i+1][j+1]) &&
-                    ((boardState[i+1][j+1] == board[i+2][j+2]) &&
-                    (boardState[i+2][j+2] == board[i+3][j+3]) &&
+                if ((boardState[i][j] == boardState[i+1][j+1]) &&
+                    (boardState[i+1][j+1] == boardState[i+2][j+2]) &&
+                    (boardState[i+2][j+2] == boardState[i+3][j+3]) &&
                     (boardState[i][j] != 0))
                     {
                         return boardState[i][j];
@@ -85,9 +87,9 @@ extern "C"
         {
             for (int i=3; i < (ROWS); i++)
             {
-                if ((boardState[i][j] == board[i-1][j+1]) &&
-                    ((boardState[i-1][j+1] == board[i-2][j+2]) &&
-                    (boardState[i-2][j+2] == board[i-3][j+3]) &&
+                if ((boardState[i][j] == boardState[i-1][j+1]) &&
+                    (boardState[i-1][j+1] == boardState[i-2][j+2]) &&
+                    (boardState[i-2][j+2] == boardState[i-3][j+3]) &&
                     (boardState[i][j] != 0))
                     {
                         return boardState[i][j];
@@ -144,17 +146,19 @@ extern "C"
             int *validMoves;
             numValidMoves = getValidMoves(tmpOccupancies, &validMoves);
 
-            // choose a move
-            int n = rand()%(numValidMoves+1);
+            // choose a random move
+            curandState_t state;
+            curand_init((unsigned long long)clock(), idx, 0, &state);
+            int n = curand(&state) % (numValidMoves + 1);
             int col = validMoves[n];
 
             // make the move
-            int row = tmpOccupancies[move]
+            int row = tmpOccupancies[col];
             tmpBoard[row][col] = tmpPlayer;
             tmpOccupancies[col] ++;
 
             // check for winner
-            winner = getOutcome(tmpBoard, numValidMoves)
+            winner = getOutcome(tmpBoard, numValidMoves);
             if (winner != 0)
             {
                 nonTerminal = 0;

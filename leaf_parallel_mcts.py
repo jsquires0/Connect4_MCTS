@@ -13,7 +13,7 @@ class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, rows, cols, n_rollouts = 64):
+    def __init__(self, root, rows, cols, n_rollouts = 5):
         self.root = root
         self.rows = rows
         self.cols = cols
@@ -174,7 +174,7 @@ class MonteCarloTreeSearch():
         cuda.memcpy_htod(d_board,h_board)
 
         # call kernel
-        mod = SourceModule(simulate.gpu_code)
+        mod = SourceModule(simulate.gpu_code, no_extern_c = True)
         func = mod.get_function("gpuSimulate")
         player = np.int32(node.state.player)
         func(d_board, d_occ, player, d_outcomes,  block = (64,1,1))
@@ -195,9 +195,9 @@ class MonteCarloTreeSearch():
             rollouts += 1
 
         # display evaluations
-        # for move, child in self.root.children.items():
-            #child.state.show_board()
-            #print(child.wins, child.visits)
+        for move, child in self.root.children.items():
+            child.state.show_board()
+            print(child.wins, child.visits)
     
         # find and return the child that results in the higest win rate
         best_node = self.choose_child(self.root, use_tree = False)
@@ -221,7 +221,7 @@ class Node():
         action decisions are based on child node stats, win total is updated
         only if the opposing player wins.
         """
-        self.visits += self.n_rollouts
+        self.visits += outcomes.shape[0]
         self.wins += outcomes.sum()
 
         return
