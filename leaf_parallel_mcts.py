@@ -13,7 +13,7 @@ class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, rows, cols, n_rollouts = 5):
+    def __init__(self, root, rows, cols, n_rollouts = 10):
         self.root = root
         self.rows = rows
         self.cols = cols
@@ -152,7 +152,7 @@ class MonteCarloTreeSearch():
         return random.choice(choices)
 
 
-    def gpu_simulation(self, node):
+    def gpu_simulation(self, node, leaf_rollouts):
         """
         Performs n_rollouts in parallel on gpu, all starting from the passed in
         node.
@@ -161,7 +161,7 @@ class MonteCarloTreeSearch():
         # define host inputs
         h_board = node.state.board.astype(np.int32)
         h_occ = node.state.column_occupancies.astype(np.int32)
-        h_outcomes = np.zeros(shape = (self.n_rollouts, 1),dtype=np.int32)
+        h_outcomes = np.zeros(shape = (leaf_rollouts, 1),dtype=np.int32)
 
         # define device inputs
         d_board = cuda.mem_alloc(h_board.nbytes)
@@ -190,7 +190,7 @@ class MonteCarloTreeSearch():
         rollouts = 0
         while rollouts < self.n_rollouts:
             child = self.selection_expansion(self.root)
-            outcomes = self.gpu_simulation(child)
+            outcomes = self.gpu_simulation(child,leaf_rollouts = 64)
             self.backup(child, outcomes)
             rollouts += 1
 
