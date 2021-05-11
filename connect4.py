@@ -1,9 +1,13 @@
 import numpy as np 
 import argparse
 from copy import deepcopy as copy
+
 # define board dimensions
 ROWS = 6
 COLS = 7
+# define length of time for MCTS to choose a move (sec)
+THINK_DURATION = 120
+
 unicode_chars = {0:u'\u25AB', 1:u'\u25CE', 2:u'\u25C9' }
 
 class ConnectFour():
@@ -156,18 +160,18 @@ class ConnectFour():
     def take_human_turn(self, player = 1):
         """ Prompt user to place a checker """
         col_id = COLS - 1
-        print(f'Choose a column number (0-{col_id})  \n')
+        checker = self.encode_position(player)
         col = -1
         while col not in self.valid_moves():
-            col = int(input('>>'))
+            col = int(input(f'Choose a column [0-{col_id}] to place {checker}: '))
         outcome = self.make_move(col, player)
-
+        self.show_board()
         return outcome
 
     def take_MCTS_turn(self, player = 2):
         node = mcts.Node(self, parent = None)
-
-        return mcts.MonteCarloTreeSearch(node, ROWS, COLS).action
+        mcts_ai = mcts.MonteCarloTreeSearch(node, THINK_DURATION)
+        return mcts_ai.action, mcts_ai.rollouts
 
     def play_human_vs_AI(self):
         """ Plays a complete game against the MCTS AI. Human player
@@ -180,13 +184,16 @@ class ConnectFour():
                 outcome = self.take_human_turn(self.player)
             # AI moves
             else:
+                print('MCTS thinking..')
                 #outcome = self.take_human_turn(self.player)
-                mcts_move = self.take_MCTS_turn(self.player)
+                mcts_move, rollouts = self.take_MCTS_turn(self.player)
+                print(f'MCTS executed {rollouts} rollouts')
                 outcome = self.make_move(mcts_move, self.player)
                 self.show_board()
-            self.player = self.player % 2 + 1
 
-        print(f'Game over - Player {outcome} wins')
+            self.player = self.player % 2 + 1
+        win_dict = {1: 'Human', 2: 'MCTS AI'}
+        print(f'Game over - {win_dict[outcome]} wins')
         return
 
     def show_board(self):

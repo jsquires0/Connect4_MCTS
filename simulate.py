@@ -3,8 +3,8 @@ gpu_code = """
 #include <curand_kernel.h>
 extern "C"
 {
-    #define COLS 7 
     #define ROWS 6
+    #define COLS 7
 
     __device__ int getValidMoves(int *occupancies, int **arr)
     {   

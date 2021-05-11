@@ -2,19 +2,19 @@ import numpy as np
 import random
 import connect4
 import copy
+import time
 
 class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, rows, cols, n_rollouts = 50):
+    def __init__(self, root, time, max_rollouts = 10000):
         self.root = root
-        self.rows = rows
-        self.cols = cols
-        self.n_rollouts = n_rollouts
+        self.think_time = time
+        self.max_rollouts = max_rollouts
         self.c = np.sqrt(2) # UCT exploration param
 
-        self.action = self.search()
+        self.action, self.rollouts = self.search()
 
     def selection_expansion(self, node):
         """ 
@@ -150,16 +150,21 @@ class MonteCarloTreeSearch():
         after completing rollouts 
         """
         rollouts = 0
-        while rollouts < self.n_rollouts:
+        begin = int(round(time.time()))
+        elapsed = begin
+        # search until think time is up or max rollouts played
+        while (((elapsed - begin) < self.think_time) and
+               (rollouts < self.max_rollouts)):
             child = self.selection_expansion(self.root)
             outcome = self.simulation(child)
             self.backup(child, outcome)
             rollouts += 1
+            elapsed = int(round(time.time()))
 
         # display evaluations
         # for move, child in self.root.children.items():
             #child.state.show_board()
-            #print(child.wins, child.visits)
+            #print(child.wins / child.visits)
     
         # find and return the child that results in the higest win rate
         best_node = self.choose_child(self.root, use_tree = False)
@@ -167,7 +172,7 @@ class MonteCarloTreeSearch():
             if child == best_node:
                 best_move = move
 
-        return best_move
+        return best_move, rollouts
 
 class Node():
     def __init__(self, game_state = None, parent = None):

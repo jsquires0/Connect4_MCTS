@@ -3,24 +3,26 @@ import random
 import connect4
 import copy
 
-
 import pycuda.driver as cuda
 import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 import simulate 
+
+# number of parallel rollouts to execute on gpu
+LEAF_ROLLOUTS = 128
+
 class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, rows, cols, n_rollouts = 10):
+    def __init__(self, root, time, max_rollouts = 10000):
         self.root = root
-        self.rows = rows
-        self.cols = cols
-        self.n_rollouts = n_rollouts
+        self.think_time = time
+        self.max_rollouts = max_rollouts
         self.c = np.sqrt(2) # UCT exploration param
 
-        self.action = self.search()
+        self.action, self.rollouts = self.search()
 
     def selection_expansion(self, node):
         """ 
@@ -154,7 +156,7 @@ class MonteCarloTreeSearch():
 
     def gpu_simulation(self, node, leaf_rollouts):
         """
-        Performs n_rollouts in parallel on gpu, all starting from the passed in
+        Performs max_rollouts in parallel on gpu, all starting from the passed in
         node.
         """
 
@@ -177,7 +179,7 @@ class MonteCarloTreeSearch():
         mod = SourceModule(simulate.gpu_code, no_extern_c = True)
         func = mod.get_function("gpuSimulate")
         player = np.int32(node.state.player)
-        func(d_board, d_occ, player, d_outcomes,  block = (64,1,1))
+        func(d_board, d_occ, player, d_outcomes,  block = (leaf_rollouts,1,1))
 
         # transfer device -> host
         cuda.memcpy_dtoh(h_outcomes, d_outcomes)
@@ -188,11 +190,16 @@ class MonteCarloTreeSearch():
         after completing rollouts 
         """
         rollouts = 0
-        while rollouts < self.n_rollouts:
+        begin = int(round(time.time()))
+        elapsed = begin
+        # search until think time is up or max rollouts played
+        while (((elapsed - begin) < self.think_time) and
+               (rollouts < self.max_rollouts)):
             child = self.selection_expansion(self.root)
-            outcomes = self.gpu_simulation(child,leaf_rollouts = 64)
+            outcomes = self.gpu_simulation(child, leaf_rollouts = LEAF_ROLLOUTS)
             self.backup(child, outcomes)
             rollouts += 1
+            elapsed = int(round(time.time()))
 
         # display evaluations
         for move, child in self.root.children.items():
@@ -205,7 +212,7 @@ class MonteCarloTreeSearch():
             if child == best_node:
                 best_move = move
 
-        return best_move
+        return best_move, rollouts*LEAF_ROLLOUTS
 
 class Node():
     def __init__(self, game_state = None, parent = None):
