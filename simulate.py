@@ -3,8 +3,8 @@ gpu_code = """
 #include <curand_kernel.h>
 extern "C"
 {
+    #define COLS 7 
     #define ROWS 6
-    #define COLS 7
 
     __device__ int getValidMoves(int *occupancies, int **arr)
     {   
@@ -31,14 +31,13 @@ extern "C"
             }
         }
         // reallocate array to have size numValidMoves
-        //*arr = (int *)realloc(*arr, numValidMoves * sizeof(int));
         *arr = validMoves;
 
         return numValidMoves;
     }
 
-
-    __device__ int getOutcome(int boardState[ROWS][COLS], int numValidMoves)
+    // checks board for four vertical or horizontal checkers in a row
+    __device__ int fourRowCol(int boardState[ROWS][COLS])
     {
         //row win?
         for (int j=0; j < (COLS-3); j++)
@@ -68,6 +67,13 @@ extern "C"
                     }
             }
         }
+        // no vertical or horizontal win
+        return 0;
+    }
+
+    // checks board for four diagonal checkers in a row
+    __device__ int fourDiagonal(int boardState[ROWS][COLS])
+    {
         // diagonal case 1?
         for (int j=0; j < (COLS-3); j++)
         {
@@ -97,16 +103,61 @@ extern "C"
             }
         }
 
+        // no diagonal win
+        return 0;
+    }
+    __device__ int getOutcome(int boardState[ROWS][COLS], int numValidMoves)
+    {
+        int winner;
+        winner = fourRowCol(boardState);
+        if (winner != 0)
+        {
+            return winner;
+        }
+        winner = fourDiagonal(boardState);
+        if (winner != 0)
+        {
+            return winner;
+        }
+
         // check for a draw 
         if(!numValidMoves)
         {
            return -1; 
         }
 
-        // game is not over
+        // game has not ended
         return 0;
     }
+    
+    __device__ int randomRollout(int *occupancies, int boardState[ROWS][COLS],
+                                 int player, int winner)
+    {
+         //make a move from the list of valid moves
+        int numValidMoves;
+        int *validMoves;
+        numValidMoves = getValidMoves(occupancies, &validMoves);
 
+        // choose a random move
+        curandState_t state;
+        curand_init((unsigned long long)clock(), idx, 0, &state);
+        int n = curand(&state) % (numValidMoves + 1);
+        int col = validMoves[n];
+
+        // make the move
+        int row = occupancies[col];
+        boardState[row][col] = player;
+        occupancies[col]++;
+
+        // check for winner
+        winner = getOutcome(boardState, numValidMoves);
+        if (winner != 0)
+        {
+            nonTerminal = 0;
+        }
+    }
+    
+    // performs the simulation stage of MCTS
     __global__ void gpuSimulate(int *boardState, 
                              int *occupancies,
                              int player,
@@ -115,7 +166,7 @@ extern "C"
         int idx = threadIdx.x + threadIdx.y*ROWS; 
         int winner = -99;
 
-        // populate a copy of the input board
+        // copy input board
         int tmpBoard[ROWS][COLS];
         for (int r = 0; r < ROWS; r++)
         {
@@ -125,7 +176,7 @@ extern "C"
             }
         }
 
-        // populate a copy of the col occupancies
+        // copy col occupancies
         int tmpOccupancies[COLS];
         for (int c = 0; c < COLS; c++)
         {
@@ -137,48 +188,19 @@ extern "C"
         
         // make valid moves until board is in a terminal state
         int nonTerminal = 1;
-        //TODO check if game is over. if yes, return winner
-        
         while (nonTerminal)
         {
-            //make a move from the list of valid moves
-            int numValidMoves;
-            int *validMoves;
-            numValidMoves = getValidMoves(tmpOccupancies, &validMoves);
-
-            // choose a random move
-            curandState_t state;
-            curand_init((unsigned long long)clock(), idx, 0, &state);
-            int n = curand(&state) % (numValidMoves + 1);
-            int col = validMoves[n];
-
-            // make the move
-            int row = tmpOccupancies[col];
-            tmpBoard[row][col] = tmpPlayer;
-            tmpOccupancies[col] ++;
-
-            // check for winner
-            winner = getOutcome(tmpBoard, numValidMoves);
-            if (winner != 0)
-            {
-                nonTerminal = 0;
-            }
-            //update the player
+            // complete a random playout
+            nonTerminal = randomRollout(tmpOccupancies, tmpBoard, 
+                                           tmpPlayer, winner);
+            // update the player
             tmpPlayer = tmpPlayer % 2 + 1;
         }
         
         // store outcome
-        if (winner == player){
-            results[idx] = -1;
-        }
-        else if (!winner)
-        {
-            results[idx] = 0;
-        }
-        else
-        {
-            results[idx] = 1;
-        }
+        if (winner == player){results[idx] = -1;}
+        else if (!winner){results[idx] = 0;}
+        else{results[idx] = 1;}
     }
 }
 """
