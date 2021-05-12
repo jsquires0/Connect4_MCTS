@@ -2,7 +2,7 @@ import numpy as np
 import random
 import connect4
 import copy
-
+import time
 import pycuda.driver as cuda
 import pycuda.autoinit
 from pycuda.compiler import SourceModule
@@ -202,9 +202,9 @@ class MonteCarloTreeSearch():
             elapsed = int(round(time.time()))
 
         # display evaluations
-        for move, child in self.root.children.items():
-            child.state.show_board()
-            print(child.wins, child.visits)
+        #for move, child in self.root.children.items():
+            #child.state.show_board()
+            #print(child.wins / child.visits)
     
         # find and return the child that results in the higest win rate
         best_node = self.choose_child(self.root, use_tree = False)

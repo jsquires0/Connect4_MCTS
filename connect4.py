@@ -6,7 +6,7 @@ from copy import deepcopy as copy
 ROWS = 6
 COLS = 7
 # define length of time for MCTS to choose a move (sec)
-THINK_DURATION = 120
+THINK_DURATION = 15
 
 unicode_chars = {0:u'\u25AB', 1:u'\u25CE', 2:u'\u25C9' }
 
