@@ -6,6 +6,7 @@ extern "C"
     #define COLS 7 
     #define ROWS 6
 
+    // determines available legal moves in the position
     __device__ int getValidMoves(int *occupancies, int **arr)
     {   
         // initialize array to be length COLS
@@ -106,6 +107,8 @@ extern "C"
         // no diagonal win
         return 0;
     }
+
+    // checks if the game has ended
     __device__ int getOutcome(int boardState[ROWS][COLS], int numValidMoves)
     {
         int winner;
@@ -129,9 +132,9 @@ extern "C"
         // game has not ended
         return 0;
     }
-    
+    // makes a random move
     __device__ int randomRollout(int *occupancies, int boardState[ROWS][COLS],
-                                 int player, int winner)
+                                 int player, int winner, int nonTerminal, int idx)
     {
          //make a move from the list of valid moves
         int numValidMoves;
@@ -155,6 +158,7 @@ extern "C"
         {
             nonTerminal = 0;
         }
+        return nonTerminal;
     }
     
     // performs the simulation stage of MCTS
@@ -191,8 +195,8 @@ extern "C"
         while (nonTerminal)
         {
             // complete a random playout
-            nonTerminal = randomRollout(tmpOccupancies, tmpBoard, 
-                                           tmpPlayer, winner);
+            nonTerminal = randomRollout(tmpOccupancies, tmpBoard, tmpPlayer, 
+                                        winner, nonTerminal,  idx);
             // update the player
             tmpPlayer = tmpPlayer % 2 + 1;
         }

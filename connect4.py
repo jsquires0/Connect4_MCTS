@@ -1,4 +1,5 @@
 import numpy as np 
+import random
 import argparse
 from copy import deepcopy as copy
 
@@ -163,7 +164,9 @@ class ConnectFour():
         checker = self.encode_position(player)
         col = -1
         while col not in self.valid_moves():
-            col = int(input(f'Choose a column [0-{col_id}] to place {checker}: '))
+            col = int(input(f'Choose a column [0-{col_id}] to place {checker} : '))
+            # make a random move
+            #col = random.choice(self.valid_moves())
         outcome = self.make_move(col, player)
         self.show_board()
         return outcome
