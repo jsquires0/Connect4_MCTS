@@ -1,6 +1,10 @@
-Requires python3, pycuda 2021.1, and CUDA.
+Requires python3, pycuda 2021.1, and CUDA.  
 Developed and tested with CUDA 11.2
  
 Execute 
-	python connect4.py -d "cpu"  to play against cpu MCTS
-	python connect4.py -d "gpu" to play against gpu MCTS
+
+	python connect4.py -d "cpu" 
+	or  
+	python connect4.py -d "gpu" 
+	
+to play against MCTS trained on either cpu or gpu
