@@ -8,7 +8,7 @@ class MonteCarloTreeSearch():
     """ Implementation of monte carlo tree search for a two
     player game"""
 
-    def __init__(self, root, time, max_rollouts = 10000):
+    def __init__(self, root, time, max_rollouts = 400):
         self.root = root
         self.think_time = time
         self.max_rollouts = max_rollouts

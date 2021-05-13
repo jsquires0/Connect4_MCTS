@@ -7,7 +7,9 @@ from copy import deepcopy as copy
 ROWS = 6
 COLS = 7
 # define length of time for MCTS to choose a move (sec)
-THINK_DURATION = 15
+THINK_DURATION = 300
+# MCTS terminates after THINK_DURATION is exceeded, or after MAX_ROLLOUTS
+MAX_ROLLOUTS = 400
 
 unicode_chars = {0:u'\u25AB', 1:u'\u25CE', 2:u'\u25C9' }
 
@@ -173,7 +175,7 @@ class ConnectFour():
 
     def take_MCTS_turn(self, player = 2):
         node = mcts.Node(self, parent = None)
-        mcts_ai = mcts.MonteCarloTreeSearch(node, THINK_DURATION)
+        mcts_ai = mcts.MonteCarloTreeSearch(node, THINK_DURATION, MAX_ROLLOUTS)
         return mcts_ai.action, mcts_ai.rollouts
 
     def play_human_vs_AI(self):
@@ -188,7 +190,6 @@ class ConnectFour():
             # AI moves
             else:
                 print('MCTS thinking..')
-                #outcome = self.take_human_turn(self.player)
                 mcts_move, rollouts = self.take_MCTS_turn(self.player)
                 print(f'MCTS executed {rollouts} rollouts')
                 outcome = self.make_move(mcts_move, self.player)
